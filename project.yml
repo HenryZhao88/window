@@ -1,0 +1,64 @@
+name: Window
+options:
+  bundleIdPrefix: com.window
+  deploymentTarget:
+    iOS: "18.0"
+  xcodeVersion: "16.0"
+  generateEmptyDirectories: true
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    DEVELOPMENT_TEAM: "XXXXXXXXXX"  # ← Replace with your Apple Team ID
+    IPHONEOS_DEPLOYMENT_TARGET: "18.0"
+    SWIFT_STRICT_CONCURRENCY: targeted
+
+targets:
+  Window:
+    type: application
+    platform: iOS
+    sources:
+      - path: Window
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.window.app
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: UIInterfaceOrientationPortrait
+        INFOPLIST_KEY_NSFaceIDUsageDescription: "Window uses Face ID to protect your productivity data."
+        CURRENT_PROJECT_VERSION: 1
+        MARKETING_VERSION: 1.0
+        ENABLE_PREVIEWS: YES
+    entitlements:
+      path: Window/Window.entitlements
+    dependencies:
+      - sdk: FamilyControls.framework
+      - sdk: DeviceActivity.framework
+      - target: WindowActivityMonitor
+        embed: true
+
+  WindowActivityMonitor:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: WindowActivityMonitor
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.window.app.monitor
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_NSExtension_NSExtensionPointIdentifier: com.apple.deviceactivity.monitor
+    entitlements:
+      path: WindowActivityMonitor/WindowActivityMonitor.entitlements
+
+  WindowTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: WindowTests
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.window.app.tests
+    dependencies:
+      - target: Window
