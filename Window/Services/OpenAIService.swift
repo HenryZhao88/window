@@ -49,6 +49,13 @@ enum OpenAIError: LocalizedError {
     }
 }
 
+enum AIModel: String {
+    /// Fast and cheap — use for recommendations, onboarding chat, most calls.
+    case mini = "gpt-4o-mini"
+    /// Smarter — reserve for structured JSON extraction where accuracy matters.
+    case full = "gpt-4o"
+}
+
 final class OpenAIService {
     static let shared = OpenAIService()
     private init() {}
@@ -61,8 +68,9 @@ final class OpenAIService {
 
     func chat(
         messages: [OpenAIMessage],
+        model: AIModel = .mini,
         jsonMode: Bool = false,
-        maxTokens: Int = 500
+        maxTokens: Int = 300
     ) async throws -> String {
         guard !apiKey.isEmpty else { throw OpenAIError.missingAPIKey }
 
@@ -73,7 +81,7 @@ final class OpenAIService {
         request.timeoutInterval = 30
 
         let body = OpenAIRequest(
-            model: "gpt-4o",
+            model: model.rawValue,
             messages: messages,
             responseFormat: jsonMode ? .init(type: "json_object") : nil,
             maxTokens: maxTokens

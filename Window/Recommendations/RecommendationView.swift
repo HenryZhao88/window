@@ -54,15 +54,22 @@ struct RecommendationView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
-                        if let profile = profiles.first { refresh(profile: profile) }
+                        if let profile = profiles.first { forceRefresh(profile: profile) }
                     } label: {
                         Image(systemName: "arrow.clockwise")
                     }
                     .disabled(engine.isLoading)
                 }
+                if let age = engine.cacheAgeDescription {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Text("Updated \(age)")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
             .onAppear {
-                if let profile = profiles.first { refresh(profile: profile) }
+                if let profile = profiles.first { refreshIfNeeded(profile: profile) }
             }
             .overlay(alignment: .top) {
                 if showOutcomeBanner, let outcome = lastOutcome {
@@ -75,25 +82,37 @@ struct RecommendationView: View {
         }
     }
 
-    private func refresh(profile: UserProfile) {
+    /// Checks cache — only calls GPT if stale (>30 min). Use on appear.
+    private func refreshIfNeeded(profile: UserProfile) {
+        Task {
+            await engine.refreshIfNeeded(
+                profile: profile,
+                tasks: tasks,
+                snapshots: Array(snapshots.prefix(100))
+            )
+        }
+    }
+
+    /// Always calls GPT. Use for explicit user-triggered refresh only.
+    private func forceRefresh(profile: UserProfile) {
         Task {
             await engine.refresh(
                 profile: profile,
                 tasks: tasks,
-                snapshots: Array(snapshots.prefix(200))
+                snapshots: Array(snapshots.prefix(100))
             )
         }
     }
 
     private func handleAction(_ outcome: RecommendationOutcome, profile: UserProfile) {
-        // Show immediate banner feedback
+        // Show immediate banner — no API call on button taps
         lastOutcome = outcome
         withAnimation { showOutcomeBanner = true }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
             withAnimation { showOutcomeBanner = false }
         }
 
-        // Log event (task name is optional — break doesn't need one)
+        // Log event
         let taskName = engine.currentTask?.name ?? "—"
         let event = RecommendationEvent(
             recommendedTaskName: taskName,
@@ -104,11 +123,16 @@ struct RecommendationView: View {
         event.outcome = outcome
         modelContext.insert(event)
 
+        // Adapt weights locally — free, no API
         ProfileAdapter().adapt(profile: profile, event: event)
 
-        // Refresh recommendation after a short delay so banner is visible first
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            refresh(profile: profile)
+        // Update score + task locally without GPT
+        Task {
+            await engine.refreshIfNeeded(
+                profile: profile,
+                tasks: tasks,
+                snapshots: Array(snapshots.prefix(100))
+            )
         }
     }
 }

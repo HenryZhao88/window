@@ -137,7 +137,8 @@ struct GoalConversationView: View {
                         .init(role: "system", content: coachSystemPrompt),
                         .init(role: "user", content: "Begin. Ask your first question.")
                     ],
-                    maxTokens: 150
+                    model: .mini,
+                    maxTokens: 100
                 )
                 messages.append(.init(role: "assistant", content: reply))
             } catch {
@@ -168,7 +169,7 @@ struct GoalConversationView: View {
                     ))
                 }
 
-                let reply = try await openAI.chat(messages: apiMessages, maxTokens: 200)
+                let reply = try await openAI.chat(messages: apiMessages, model: .mini, maxTokens: 120)
                 messages.append(.init(role: "assistant", content: reply))
 
                 if userTurns >= maxUserTurns {
@@ -201,10 +202,12 @@ struct GoalConversationView: View {
             """
 
             do {
+                // Use the smarter model only here — JSON accuracy matters for the user's profile
                 let json = try await openAI.chat(
                     messages: [.init(role: "user", content: extractionPrompt)],
+                    model: .full,
                     jsonMode: true,
-                    maxTokens: 300
+                    maxTokens: 200
                 )
 
                 if let data = json.data(using: .utf8),
