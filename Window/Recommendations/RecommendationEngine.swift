@@ -2,6 +2,7 @@ import Foundation
 import Observation
 
 @Observable
+@MainActor
 final class RecommendationEngine {
     var currentRecommendation = ""
     var currentTask: WindowTask?
@@ -13,7 +14,6 @@ final class RecommendationEngine {
     private let ranker = TaskRanker()
     private let openAI = OpenAIService.shared
 
-    @MainActor
     func refresh(profile: UserProfile, tasks: [WindowTask], snapshots: [UsageSnapshot]) async {
         isLoading = true
         errorMessage = nil

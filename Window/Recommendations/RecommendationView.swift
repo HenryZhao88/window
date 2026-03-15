@@ -8,6 +8,8 @@ struct RecommendationView: View {
     @Query(sort: \UsageSnapshot.timestamp, order: .reverse) private var snapshots: [UsageSnapshot]
 
     @State private var engine = RecommendationEngine()
+    @State private var lastOutcome: RecommendationOutcome?
+    @State private var showOutcomeBanner = false
 
     var body: some View {
         NavigationStack {
@@ -62,6 +64,14 @@ struct RecommendationView: View {
             .onAppear {
                 if let profile = profiles.first { refresh(profile: profile) }
             }
+            .overlay(alignment: .top) {
+                if showOutcomeBanner, let outcome = lastOutcome {
+                    OutcomeBanner(outcome: outcome)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                        .padding(.top, 8)
+                }
+            }
+            .animation(.easeInOut(duration: 0.3), value: showOutcomeBanner)
         }
     }
 
@@ -76,10 +86,17 @@ struct RecommendationView: View {
     }
 
     private func handleAction(_ outcome: RecommendationOutcome, profile: UserProfile) {
-        guard let task = engine.currentTask else { return }
+        // Show immediate banner feedback
+        lastOutcome = outcome
+        withAnimation { showOutcomeBanner = true }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            withAnimation { showOutcomeBanner = false }
+        }
 
+        // Log event (task name is optional — break doesn't need one)
+        let taskName = engine.currentTask?.name ?? "—"
         let event = RecommendationEvent(
-            recommendedTaskName: task.name,
+            recommendedTaskName: taskName,
             recommendationText: engine.currentRecommendation,
             productivityScore: engine.productivityScore,
             timeOfDay: Double(Calendar.current.component(.hour, from: Date())) / 24.0
@@ -88,7 +105,11 @@ struct RecommendationView: View {
         modelContext.insert(event)
 
         ProfileAdapter().adapt(profile: profile, event: event)
-        refresh(profile: profile)
+
+        // Refresh recommendation after a short delay so banner is visible first
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            refresh(profile: profile)
+        }
     }
 }
 
@@ -243,6 +264,29 @@ struct ErrorCard: View {
         .padding()
         .background(Color(.systemGray6))
         .clipShape(RoundedRectangle(cornerRadius: 16))
+    }
+}
+
+struct OutcomeBanner: View {
+    let outcome: RecommendationOutcome
+
+    private var config: (icon: String, label: String, color: Color) {
+        switch outcome {
+        case .accepted:   return ("play.fill",           "Starting task",  .blue)
+        case .skipped:    return ("forward.fill",         "Skipped",        .gray)
+        case .breakTaken: return ("cup.and.saucer.fill",  "Enjoy your break", .green)
+        }
+    }
+
+    var body: some View {
+        Label(config.label, systemImage: config.icon)
+            .font(.subheadline).bold()
+            .foregroundStyle(.white)
+            .padding(.horizontal, 18)
+            .padding(.vertical, 10)
+            .background(config.color)
+            .clipShape(Capsule())
+            .shadow(radius: 4)
     }
 }
 
