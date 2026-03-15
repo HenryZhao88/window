@@ -10,7 +10,7 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.0"
-    DEVELOPMENT_TEAM: "XXXXXXXXXX"  # ← Replace with your Apple Team ID
+    DEVELOPMENT_TEAM: "henryzhao88@icloud.com"  # ← Replace with your Apple Team ID
     IPHONEOS_DEPLOYMENT_TARGET: "18.0"
     SWIFT_STRICT_CONCURRENCY: targeted
 
@@ -47,10 +47,11 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.window.app.monitor
-        GENERATE_INFOPLIST_FILE: YES
-        INFOPLIST_KEY_NSExtension_NSExtensionPointIdentifier: com.apple.deviceactivity.monitor
+        INFOPLIST_FILE: WindowActivityMonitor/Info.plist
     entitlements:
       path: WindowActivityMonitor/WindowActivityMonitor.entitlements
+    dependencies:
+      - sdk: DeviceActivity.framework
 
   WindowTests:
     type: bundle.unit-test
