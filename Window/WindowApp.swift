@@ -27,6 +27,10 @@ struct RootView: View {
         }
         .onAppear {
             ScreenTimeService.shared.checkStatus()
+            ScreenTimeService.shared.resumeMonitoringIfNeeded()
+            if let profile = profiles.first, profile.onboardingComplete {
+                NotificationScheduler.shared.scheduleDailyReminder(for: profile)
+            }
         }
     }
 }

@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import Observation
 
 struct RecommendationView: View {
     @Environment(\.modelContext) private var modelContext
@@ -8,6 +9,7 @@ struct RecommendationView: View {
     @Query(sort: \UsageSnapshot.timestamp, order: .reverse) private var snapshots: [UsageSnapshot]
 
     @State private var engine = RecommendationEngine()
+    @State private var session = FocusSessionManager()
     @State private var lastOutcome: RecommendationOutcome?
     @State private var showOutcomeBanner = false
 
@@ -27,7 +29,14 @@ struct RecommendationView: View {
                                 RecommendationCard(
                                     text: engine.currentRecommendation,
                                     task: engine.currentTask,
-                                    onAction: { handleAction($0, profile: profile) }
+                                    onStart: {
+                                        if let task = engine.currentTask {
+                                            session.start(task: task)
+                                            logEvent(.accepted, profile: profile)
+                                        }
+                                    },
+                                    onSkip: { logEvent(.skipped, profile: profile) },
+                                    onBreak: { logEvent(.breakTaken, profile: profile) }
                                 )
                             }
                         }
@@ -69,6 +78,8 @@ struct RecommendationView: View {
                 }
             }
             .onAppear {
+                // Pull in any events the DeviceActivity extension wrote while the app was closed
+                ScreenTimeService.shared.importExtensionEvents(into: modelContext)
                 if let profile = profiles.first { refreshIfNeeded(profile: profile) }
             }
             .overlay(alignment: .top) {
@@ -79,10 +90,37 @@ struct RecommendationView: View {
                 }
             }
             .animation(.easeInOut(duration: 0.3), value: showOutcomeBanner)
+            .fullScreenCover(
+                isPresented: Binding(
+                    get: { session.isActive },
+                    set: { isPresented in
+                        if !isPresented {
+                            session.end()
+                        }
+                    }
+                )
+            ) {
+                if let profile = profiles.first {
+                    FocusTimerView(
+                        session: session,
+                        onComplete: { elapsedSeconds in
+                            completeSession(elapsedSeconds: elapsedSeconds, profile: profile)
+                        },
+                        onSkip: {
+                            logEvent(.skipped, profile: profile)
+                            refreshIfNeeded(profile: profile)
+                        },
+                        onBreakLogged: {
+                            logEvent(.breakTaken, profile: profile)
+                        }
+                    )
+                }
+            }
         }
     }
 
-    /// Checks cache — only calls GPT if stale (>30 min). Use on appear.
+    // MARK: - Private
+
     private func refreshIfNeeded(profile: UserProfile) {
         Task {
             await engine.refreshIfNeeded(
@@ -93,7 +131,6 @@ struct RecommendationView: View {
         }
     }
 
-    /// Always calls GPT. Use for explicit user-triggered refresh only.
     private func forceRefresh(profile: UserProfile) {
         Task {
             await engine.refresh(
@@ -104,35 +141,33 @@ struct RecommendationView: View {
         }
     }
 
-    private func handleAction(_ outcome: RecommendationOutcome, profile: UserProfile) {
-        // Show immediate banner — no API call on button taps
-        lastOutcome = outcome
-        withAnimation { showOutcomeBanner = true }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-            withAnimation { showOutcomeBanner = false }
-        }
+    private func logEvent(_ outcome: RecommendationOutcome, profile: UserProfile) {
+        showBanner(outcome)
 
-        // Log event
-        let taskName = engine.currentTask?.name ?? "—"
         let event = RecommendationEvent(
-            recommendedTaskName: taskName,
+            recommendedTaskName: engine.currentTask?.name ?? "—",
             recommendationText: engine.currentRecommendation,
             productivityScore: engine.productivityScore,
             timeOfDay: Double(Calendar.current.component(.hour, from: Date())) / 24.0
         )
         event.outcome = outcome
         modelContext.insert(event)
-
-        // Adapt weights locally — free, no API
         ProfileAdapter().adapt(profile: profile, event: event)
+    }
 
-        // Update score + task locally without GPT
-        Task {
-            await engine.refreshIfNeeded(
-                profile: profile,
-                tasks: tasks,
-                snapshots: Array(snapshots.prefix(100))
-            )
+    private func completeSession(elapsedSeconds: Int, profile: UserProfile) {
+        if let task = session.activeTask {
+            task.actualMinutes = elapsedSeconds / 60
+        }
+        logEvent(.accepted, profile: profile)
+        refreshIfNeeded(profile: profile)
+    }
+
+    private func showBanner(_ outcome: RecommendationOutcome) {
+        lastOutcome = outcome
+        withAnimation { showOutcomeBanner = true }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            withAnimation { showOutcomeBanner = false }
         }
     }
 }
@@ -195,7 +230,11 @@ struct ProductivityScoreCard: View {
 struct RecommendationCard: View {
     let text: String
     let task: WindowTask?
-    let onAction: (RecommendationOutcome) -> Void
+    let onStart: () -> Void
+    let onSkip: () -> Void
+    let onBreak: () -> Void
+
+    @State private var showSkipConfirmation = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -219,15 +258,27 @@ struct RecommendationCard: View {
             }
 
             HStack(spacing: 10) {
-                ActionButton("Start", icon: "play.fill", color: .blue) { onAction(.accepted) }
-                ActionButton("Skip", icon: "forward.fill", color: .gray) { onAction(.skipped) }
-                ActionButton("Break", icon: "cup.and.saucer.fill", color: .green) { onAction(.breakTaken) }
+                ActionButton("Start", icon: "play.fill", color: .blue, action: onStart)
+                ActionButton("Skip", icon: "forward.fill", color: .gray) {
+                    showSkipConfirmation = true
+                }
+                ActionButton("Break", icon: "cup.and.saucer.fill", color: .green, action: onBreak)
             }
         }
         .padding()
         .background(Color(.systemBackground))
         .clipShape(RoundedRectangle(cornerRadius: 16))
         .shadow(color: .black.opacity(0.07), radius: 8, y: 2)
+        .confirmationDialog(
+            "Do you really want to skip?",
+            isPresented: $showSkipConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Yes, skip this task", role: .destructive, action: onSkip)
+            Button("Keep going", role: .cancel) {}
+        } message: {
+            Text("Window will recommend your next best task instead.")
+        }
     }
 }
 
@@ -331,5 +382,110 @@ struct GoalBanner: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.blue.opacity(0.06))
         .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+}
+
+@Observable
+@MainActor
+final class FocusSessionManager {
+    var activeTask: WindowTask?
+    var startedAt: Date?
+
+    var isActive: Bool {
+        activeTask != nil
+    }
+
+    func start(task: WindowTask) {
+        activeTask = task
+        startedAt = Date()
+    }
+
+    func elapsedSeconds(now: Date = Date()) -> Int {
+        guard let startedAt else { return 0 }
+        return max(0, Int(now.timeIntervalSince(startedAt)))
+    }
+
+    func end() {
+        activeTask = nil
+        startedAt = nil
+    }
+}
+
+struct FocusTimerView: View {
+    let session: FocusSessionManager
+    let onComplete: (Int) -> Void
+    let onSkip: () -> Void
+    let onBreakLogged: () -> Void
+
+    @Environment(\.dismiss) private var dismiss
+
+    private var taskName: String {
+        session.activeTask?.name ?? "Focus Session"
+    }
+
+    private var estimatedMinutes: Int? {
+        session.activeTask?.estimatedMinutes
+    }
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { context in
+            let elapsedSeconds = session.elapsedSeconds(now: context.date)
+
+            VStack(spacing: 24) {
+                Spacer()
+
+                Text(taskName)
+                    .font(.largeTitle.bold())
+                    .multilineTextAlignment(.center)
+
+                if let estimatedMinutes {
+                    Text("\(estimatedMinutes) minute focus block")
+                        .font(.headline)
+                        .foregroundStyle(.secondary)
+                }
+
+                Text(formattedTime(elapsedSeconds))
+                    .font(.system(size: 56, weight: .semibold, design: .rounded))
+                    .monospacedDigit()
+
+                VStack(spacing: 12) {
+                    Button("Complete Session") {
+                        onComplete(elapsedSeconds)
+                        session.end()
+                        dismiss()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+
+                    Button("Log Break") {
+                        onBreakLogged()
+                    }
+                    .buttonStyle(.bordered)
+
+                    Button("Skip Session", role: .destructive) {
+                        onSkip()
+                        session.end()
+                        dismiss()
+                    }
+                    .buttonStyle(.bordered)
+                }
+
+                Spacer()
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding(32)
+            .background(Color(.systemBackground))
+        }
+    }
+
+    private func formattedTime(_ elapsedSeconds: Int) -> String {
+        let hours = elapsedSeconds / 3600
+        let minutes = (elapsedSeconds % 3600) / 60
+        let seconds = elapsedSeconds % 60
+
+        if hours > 0 {
+            return String(format: "%02d:%02d:%02d", hours, minutes, seconds)
+        }
+        return String(format: "%02d:%02d", minutes, seconds)
     }
 }

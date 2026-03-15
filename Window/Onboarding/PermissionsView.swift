@@ -10,22 +10,24 @@ struct PermissionsView: View {
         VStack(spacing: 0) {
             Spacer()
 
-            VStack(spacing: 24) {
-                Image(systemName: "chart.bar.doc.horizontal.fill")
-                    .font(.system(size: 72))
-                    .foregroundStyle(.blue)
+            VStack(spacing: 32) {
+                permissionRow(
+                    icon: "chart.bar.doc.horizontal.fill",
+                    color: .blue,
+                    title: "Screen Time",
+                    description: "See when you focus best and when you drift."
+                )
 
-                VStack(spacing: 10) {
-                    Text("See Your Patterns")
-                        .font(.largeTitle).bold()
+                Divider().padding(.horizontal, 40)
 
-                    Text("Window reads your Screen Time data to learn when you focus best and when you drift — so every recommendation actually fits your life.")
-                        .font(.body)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal)
-                }
+                permissionRow(
+                    icon: "bell.badge.fill",
+                    color: .orange,
+                    title: "Notifications",
+                    description: "Get nudged when a productive window opens up."
+                )
             }
+            .padding(.horizontal, 32)
 
             Spacer()
 
@@ -34,13 +36,14 @@ struct PermissionsView: View {
                     Task {
                         isRequesting = true
                         await screenTime.requestAuthorization()
+                        await NotificationScheduler.shared.requestPermission()
                         isRequesting = false
                         onContinue()
                     }
                 } label: {
                     Label(
-                        isRequesting ? "Requesting access…" : "Allow Screen Time Access",
-                        systemImage: "chart.bar"
+                        isRequesting ? "Requesting access…" : "Allow Access",
+                        systemImage: "lock.open.fill"
                     )
                     .frame(maxWidth: .infinity)
                     .padding()
@@ -56,5 +59,23 @@ struct PermissionsView: View {
             .padding(.horizontal, 24)
             .padding(.bottom, 40)
         }
+    }
+
+    private func permissionRow(icon: String, color: Color, title: String, description: String) -> some View {
+        HStack(spacing: 16) {
+            Image(systemName: icon)
+                .font(.system(size: 36))
+                .foregroundStyle(color)
+                .frame(width: 48)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.headline)
+                Text(description)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }

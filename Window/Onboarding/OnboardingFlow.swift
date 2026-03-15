@@ -7,12 +7,14 @@ struct OnboardingFlow: View {
 
     @State private var stage: Stage = .permissions
 
-    enum Stage { case permissions, goalConversation, productivityProfile }
+    enum Stage { case permissions, appSelection, goalConversation, productivityProfile }
 
     var body: some View {
         switch stage {
         case .permissions:
-            PermissionsView { stage = .goalConversation }
+            PermissionsView { stage = .appSelection }
+        case .appSelection:
+            AppSelectionView { stage = .goalConversation }
         case .goalConversation:
             GoalConversationView { stage = .productivityProfile }
         case .productivityProfile:
@@ -29,5 +31,8 @@ struct OnboardingFlow: View {
             modelContext.insert(profile)
         }
         profile.onboardingComplete = true
+
+        // Schedule the daily reminder now that we have a profile
+        NotificationScheduler.shared.scheduleDailyReminder(for: profile)
     }
 }

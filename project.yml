@@ -36,7 +36,10 @@ targets:
     dependencies:
       - sdk: FamilyControls.framework
       - sdk: DeviceActivity.framework
+      - sdk: Charts.framework
       - target: WindowActivityMonitor
+        embed: true
+      - target: WindowActivityReport
         embed: true
 
   WindowActivityMonitor:
@@ -52,6 +55,22 @@ targets:
       path: WindowActivityMonitor/WindowActivityMonitor.entitlements
     dependencies:
       - sdk: DeviceActivity.framework
+
+  WindowActivityReport:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: WindowActivityReport
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.window.app.activityreport
+        INFOPLIST_FILE: WindowActivityReport/Info.plist
+    entitlements:
+      path: WindowActivityReport/WindowActivityReport.entitlements
+    dependencies:
+      - sdk: DeviceActivity.framework
+      - sdk: FamilyControls.framework
+      - sdk: Charts.framework
 
   WindowTests:
     type: bundle.unit-test

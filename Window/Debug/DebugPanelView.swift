@@ -127,12 +127,23 @@ struct DebugPanelView: View {
     // MARK: - Actions
 
     private func injectFakeSnapshot() {
-        let snapshot = UsageSnapshot(
-            appBundleID: "com.burbn.instagram",
-            category: "SocialNetworking",
-            durationSeconds: socialMinutesToInject * 60
-        )
-        modelContext.insert(snapshot)
+        // Inject samples across multiple categories and hours so the chart shows multiple lines
+        let samples: [(String, String, Double, TimeInterval)] = [
+            ("com.burbn.instagram",   "SocialNetworking", socialMinutesToInject * 60,  0),
+            ("com.burbn.instagram",   "SocialNetworking", 15 * 60, -3600 * 3),
+            ("com.apple.youtube",     "Entertainment",    25 * 60, -3600 * 2),
+            ("com.apple.youtube",     "Entertainment",    10 * 60, -3600 * 5),
+            ("com.apple.games",       "Games",            20 * 60, -3600 * 1),
+            ("com.microsoft.onenote", "Productivity",     30 * 60, -3600 * 4),
+        ]
+        for (bundle, category, duration, offset) in samples {
+            modelContext.insert(UsageSnapshot(
+                appBundleID: bundle,
+                category: category,
+                durationSeconds: duration,
+                timestamp: Date().addingTimeInterval(offset)
+            ))
+        }
     }
 
     private func fireTestNotification() {

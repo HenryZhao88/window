@@ -11,7 +11,6 @@ final class RecommendationEngine {
     var errorMessage: String?
     var cachedAt: Date?
 
-    /// How long a cached recommendation stays valid before a new GPT call is made.
     static let cacheTTL: TimeInterval = 30 * 60  // 30 minutes
 
     private let scorer = ProductivityScorer()
@@ -20,25 +19,36 @@ final class RecommendationEngine {
 
     // MARK: - Public API
 
-    /// Call on button taps or minor events — updates the score and task locally,
-    /// but only calls GPT if the cache has expired.
     func refreshIfNeeded(profile: UserProfile, tasks: [WindowTask], snapshots: [UsageSnapshot]) async {
+        let report = UsageReport.loadFromAppGroup()
         let cacheStale = cachedAt.map { Date().timeIntervalSince($0) > Self.cacheTTL } ?? true
         if cacheStale {
-            await refresh(profile: profile, tasks: tasks, snapshots: snapshots)
+            await refresh(profile: profile, tasks: tasks, snapshots: snapshots, report: report)
         } else {
-            // Recompute score locally (free) but keep cached recommendation text
-            productivityScore = scorer.score(profile: profile, recentSnapshots: snapshots)
+            productivityScore = scorer.score(profile: profile, recentSnapshots: snapshots, report: report)
             currentTask = ranker.topTask(from: tasks, productivityScore: productivityScore)
         }
     }
 
-    /// Always makes a GPT call. Use for explicit pull-to-refresh only.
     func refresh(profile: UserProfile, tasks: [WindowTask], snapshots: [UsageSnapshot]) async {
+        let report = UsageReport.loadFromAppGroup()
+        await refresh(profile: profile, tasks: tasks, snapshots: snapshots, report: report)
+    }
+
+    var cacheAgeDescription: String? {
+        guard let cachedAt else { return nil }
+        let minutes = Int(Date().timeIntervalSince(cachedAt) / 60)
+        if minutes < 1 { return "just now" }
+        return "\(minutes)m ago"
+    }
+
+    // MARK: - Private
+
+    private func refresh(profile: UserProfile, tasks: [WindowTask], snapshots: [UsageSnapshot], report: UsageReport) async {
         isLoading = true
         errorMessage = nil
 
-        let score = scorer.score(profile: profile, recentSnapshots: snapshots)
+        let score = scorer.score(profile: profile, recentSnapshots: snapshots, report: report)
         productivityScore = score
 
         guard let topTask = ranker.topTask(from: tasks, productivityScore: score) else {
@@ -52,14 +62,13 @@ final class RecommendationEngine {
 
         do {
             currentRecommendation = try await openAI.chat(
-                messages: buildMessages(profile: profile, task: topTask, score: score, snapshots: snapshots),
+                messages: buildMessages(profile: profile, task: topTask, score: score, snapshots: snapshots, report: report),
                 model: .mini,
-                maxTokens: 100   // 2-3 sentences fits comfortably in 100 tokens
+                maxTokens: 100
             )
             cachedAt = Date()
         } catch {
             errorMessage = error.localizedDescription
-            // Local fallback — no API cost
             let level = scorer.description(for: score)
             currentRecommendation = "Your energy is \(level) right now. Focus on: \(topTask.name) (\(topTask.estimatedMinutes) min)."
         }
@@ -67,43 +76,53 @@ final class RecommendationEngine {
         isLoading = false
     }
 
-    var cacheAgeDescription: String? {
-        guard let cachedAt else { return nil }
-        let minutes = Int(Date().timeIntervalSince(cachedAt) / 60)
-        if minutes < 1 { return "just now" }
-        return "\(minutes)m ago"
-    }
-
-    // MARK: - Prompt Construction
-
     private func buildMessages(
         profile: UserProfile,
         task: WindowTask,
         score: Double,
-        snapshots: [UsageSnapshot]
+        snapshots: [UsageSnapshot],
+        report: UsageReport
     ) -> [OpenAIMessage] {
-        // Concise system prompt — fewer tokens = lower cost
         let system = "You are Window, an AI coach for students. Write 2 sentences: one connecting the task to the user's 10-year goal, one motivating them to start now. Be direct, specific, no fluff."
 
         let daysLeft = max(0, Int(task.deadline.timeIntervalSinceNow / 86400))
         let level = scorer.description(for: score)
-
         let cutoff = Date().addingTimeInterval(-7200)
-        let socialMinutes = Int(
-            snapshots
-                .filter { $0.timestamp > cutoff && $0.category == "SocialNetworking" }
-                .reduce(0.0) { $0 + $1.durationSeconds } / 60
-        )
 
-        // Compact context — only what GPT actually needs
-        var lines = [
+        // Phone context: prefer real report data, fall back to threshold events
+        let phoneContext: String
+        if report.hasSufficientData {
+            let cal = Calendar.current
+            let todayDistracting = report.days
+                .first { cal.isDate($0.date, inSameDayAs: Date()) }?
+                .distractingMinutes ?? 0
+            let avgDistracting = report.days.reduce(0.0) { $0 + $1.distractingMinutes } / Double(report.days.count)
+
+            if todayDistracting == 0 {
+                phoneContext = "Phone barely used today — possible focused period"
+            } else if todayDistracting > avgDistracting * 1.5 {
+                phoneContext = "Heavy distraction today: \(Int(todayDistracting))min vs \(Int(avgDistracting))min avg"
+            } else {
+                phoneContext = "Normal phone use today (\(Int(todayDistracting))min distracting)"
+            }
+        } else {
+            let hasRecent = !snapshots.filter { $0.timestamp > cutoff }.isEmpty
+            let socialMins = Int(
+                snapshots
+                    .filter { $0.timestamp > cutoff && $0.category == "SocialNetworking" }
+                    .reduce(0.0) { $0 + $1.durationSeconds } / 60
+            )
+            phoneContext = !hasRecent
+                ? "Phone idle — possible productive gap"
+                : socialMins > 15 ? "Recent distraction: \(socialMins)min social media" : "Light phone use"
+        }
+
+        let lines = [
             "Energy: \(level)",
             "Goal: \(profile.tenYearGoal.isEmpty ? "not set" : profile.tenYearGoal)",
-            "Task: \(task.name) (\(task.estimatedMinutes)min, due in \(daysLeft)d)"
+            "Task: \(task.name) (\(task.estimatedMinutes)min, due in \(daysLeft)d)",
+            phoneContext
         ]
-        if socialMinutes > 15 {
-            lines.append("Recent distraction: \(socialMinutes)min social media")
-        }
 
         return [
             .init(role: "system", content: system),
