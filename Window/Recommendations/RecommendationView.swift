@@ -22,7 +22,7 @@ struct RecommendationView: View {
                             if engine.isLoading {
                                 LoadingCard()
                             } else if let error = engine.errorMessage {
-                                ErrorCard(message: error) { refresh(profile: profile) }
+                                ErrorCard(message: error) { forceRefresh(profile: profile) }
                             } else if !engine.currentRecommendation.isEmpty {
                                 RecommendationCard(
                                     text: engine.currentRecommendation,

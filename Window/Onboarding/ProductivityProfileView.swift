@@ -61,7 +61,7 @@ struct ProductivityProfileView: View {
                             Button {
                                 focusDuration = mins
                             } label: {
-                                Text(mins < 60 ? "\(mins)m" : "\(mins/60)h")
+                                Text(formatDuration(mins))
                                     .font(.subheadline).bold()
                                     .frame(maxWidth: .infinity)
                                     .padding(.vertical, 12)
@@ -110,6 +110,13 @@ struct ProductivityProfileView: View {
             }
             .padding(.horizontal, 24)
         }
+    }
+
+    private func formatDuration(_ mins: Int) -> String {
+        if mins < 60 { return "\(mins)m" }
+        let hours = mins / 60
+        let remaining = mins % 60
+        return remaining == 0 ? "\(hours)h" : "\(hours)h \(remaining)m"
     }
 
     private var procrastinationLabel: String {

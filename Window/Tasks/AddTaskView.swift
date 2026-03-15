@@ -33,7 +33,7 @@ struct AddTaskView: View {
                     DatePicker("Deadline", selection: $deadline, displayedComponents: .date)
 
                     Stepper(
-                        "Est. time: \(estimatedMinutes < 60 ? "\(estimatedMinutes) min" : "\(estimatedMinutes / 60)h \(estimatedMinutes % 60 > 0 ? "\(estimatedMinutes % 60)m" : "")")",
+                        "Est. time: \(formatDuration(estimatedMinutes))",
                         value: $estimatedMinutes,
                         in: 5...480,
                         step: 5
@@ -55,6 +55,13 @@ struct AddTaskView: View {
                 }
             }
         }
+    }
+
+    private func formatDuration(_ mins: Int) -> String {
+        if mins < 60 { return "\(mins) min" }
+        let hours = mins / 60
+        let remaining = mins % 60
+        return remaining == 0 ? "\(hours)h" : "\(hours)h \(remaining)m"
     }
 
     private var difficultyLabel: String {
