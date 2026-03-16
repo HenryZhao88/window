@@ -6,6 +6,8 @@ final class NotificationScheduler {
 
     private let center = UNUserNotificationCenter.current()
     private let dailyReminderIdentifier = "window.daily.reminder"
+    private let scheduledChronotypeKey = "window.notification.chronotype"
+    private let scheduledFocusKey = "window.notification.focus"
 
     private init() {}
 
@@ -18,6 +20,15 @@ final class NotificationScheduler {
     }
 
     func scheduleDailyReminder(for profile: UserProfile) {
+        let chronotypeRaw = profile.chronotype.rawValue
+        let focus = profile.weeklyFocus.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // Skip rescheduling if neither the time nor the message body has changed.
+        let defaults = UserDefaults.standard
+        guard defaults.string(forKey: scheduledChronotypeKey) != chronotypeRaw ||
+              defaults.string(forKey: scheduledFocusKey) != focus
+        else { return }
+
         let content = UNMutableNotificationContent()
         content.title = "Window"
         content.body = reminderBody(for: profile)
@@ -39,6 +50,9 @@ final class NotificationScheduler {
                 print("[Notifications] Scheduling failed: \(error.localizedDescription)")
             }
         }
+
+        defaults.set(chronotypeRaw, forKey: scheduledChronotypeKey)
+        defaults.set(focus, forKey: scheduledFocusKey)
     }
 
     private func reminderTime(for profile: UserProfile) -> DateComponents {

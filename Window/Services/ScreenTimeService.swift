@@ -23,6 +23,8 @@ final class ScreenTimeService: ObservableObject {
 
     @Published var isAuthorized = false
 
+    private let activityCenter = DeviceActivityCenter()
+
     private var sharedDefaults: UserDefaults? {
         UserDefaults(suiteName: SharedModelContainer.appGroupIdentifier)
     }
@@ -76,7 +78,7 @@ final class ScreenTimeService: ObservableObject {
         }
 
         do {
-            try DeviceActivityCenter().startMonitoring(
+            try activityCenter.startMonitoring(
                 DeviceActivityName.daily,
                 during: schedule,
                 events: events
@@ -127,6 +129,11 @@ final class ScreenTimeService: ObservableObject {
 
     /// Import events written by the DeviceActivity extension into SwiftData.
     /// Returns true if any events were imported (signals new snapshot data).
+    ///
+    /// Uses an atomic rename to avoid the race where the extension writes new events
+    /// between our read and our clear. The extension always writes to activity_events.json;
+    /// we rename it to activity_events_processing.json before reading, so the extension
+    /// can immediately start a fresh file with no data loss.
     @discardableResult
     func importExtensionEvents(into context: ModelContext) -> Bool {
         guard let groupURL = FileManager.default.containerURL(
@@ -134,23 +141,42 @@ final class ScreenTimeService: ObservableObject {
         ) else { return false }
 
         let eventsFile = groupURL.appendingPathComponent("activity_events.json")
-        guard let data = try? Data(contentsOf: eventsFile),
+        let processingFile = groupURL.appendingPathComponent("activity_events_processing.json")
+        let fm = FileManager.default
+
+        // Process any file left over from a previous crash before we rename a new one.
+        var didImport = false
+        if fm.fileExists(atPath: processingFile.path) {
+            didImport = processEventsFile(processingFile, into: context)
+        }
+
+        // Atomic rename: the extension can safely start writing to activity_events.json
+        // again the moment this returns; no events will be lost or double-counted.
+        do {
+            try fm.moveItem(at: eventsFile, to: processingFile)
+        } catch {
+            return didImport
+        }
+
+        didImport = processEventsFile(processingFile, into: context) || didImport
+        return didImport
+    }
+
+    private func processEventsFile(_ url: URL, into context: ModelContext) -> Bool {
+        defer { try? FileManager.default.removeItem(at: url) }
+        guard let data = try? Data(contentsOf: url),
               let events = try? JSONDecoder().decode([ActivityEvent].self, from: data),
               !events.isEmpty
         else { return false }
 
         for event in events {
-            let snapshot = UsageSnapshot(
+            context.insert(UsageSnapshot(
                 appBundleID: event.appBundleID,
                 category: event.category,
                 durationSeconds: event.durationSeconds,
                 timestamp: event.timestamp
-            )
-            context.insert(snapshot)
+            ))
         }
-
-        // Clear the file after import
-        try? "[]".data(using: .utf8)?.write(to: eventsFile)
         return true
     }
 }

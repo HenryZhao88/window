@@ -9,10 +9,13 @@ struct UsageReportDay: Codable, Identifiable {
     var totalMinutes: Double
     var categoryMinutes: [String: Double]   // display name → minutes, e.g. "Social Networking" → 45.0
 
+    // Apple's localized display name strings from DeviceActivityReport.
+    // Distinct from ProductivityScorer.distractingCategories which uses bundle-style event strings.
+    static let distractingCategories: [String] = ["Social Networking", "Entertainment", "Games"]
+
     /// Minutes from distracting categories (social, entertainment, games).
     var distractingMinutes: Double {
-        let distractingKeys = ["Social Networking", "Entertainment", "Games"]
-        return distractingKeys.reduce(0) { $0 + (categoryMinutes[$1] ?? 0) }
+        Self.distractingCategories.reduce(0) { $0 + (categoryMinutes[$1] ?? 0) }
     }
 }
 

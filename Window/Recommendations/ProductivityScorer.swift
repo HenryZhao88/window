@@ -64,6 +64,10 @@ struct ProductivityScorer {
     /// Uses the report extension's historical data.
     /// Compares today's tracked distraction minutes against the user's personal baseline.
     private func realDataFatigue(report: UsageReport, recentSnapshots: [UsageSnapshot], relativeTo date: Date) -> Double {
+        guard !report.days.isEmpty else {
+            return thresholdFatigue(from: recentSnapshots, relativeTo: date)
+        }
+
         let cal = Calendar.current
         let todayStart = cal.startOfDay(for: date)
 
@@ -118,7 +122,11 @@ struct ProductivityScorer {
         exp(-pow(x - center, 2) / (2 * pow(width, 2)))
     }
 
+    // DeviceActivity threshold-event category strings (bundle-style, not localized).
+    // Distinct from UsageReportDay.distractingCategories which uses Apple's localized display names.
+    static let distractingCategories: Set<String> = ["SocialNetworking", "Entertainment", "Games"]
+
     private func isDistractingCategory(_ category: String) -> Bool {
-        ["SocialNetworking", "Entertainment", "Games"].contains(category)
+        Self.distractingCategories.contains(category)
     }
 }

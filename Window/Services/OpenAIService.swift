@@ -31,7 +31,10 @@ private struct OpenAIResponse: Codable {
 
 enum OpenAIError: LocalizedError {
     case missingAPIKey
-    case httpError(Int)
+    case unauthorized           // 401 — bad or expired key
+    case rateLimited            // 429 — too many requests
+    case serverError(Int)       // 5xx — OpenAI-side failure
+    case httpError(Int)         // other unexpected status codes
     case decodingFailed
     case emptyResponse
 
@@ -39,8 +42,14 @@ enum OpenAIError: LocalizedError {
         switch self {
         case .missingAPIKey:
             return "OpenAI API key is not set. Add it in Settings."
+        case .unauthorized:
+            return "Invalid OpenAI API key. Check your key in Settings."
+        case .rateLimited:
+            return "OpenAI rate limit reached. Try again in a moment."
+        case .serverError(let code):
+            return "OpenAI server error (\(code)). Try again shortly."
         case .httpError(let code):
-            return "OpenAI request failed with HTTP \(code). Check your API key."
+            return "OpenAI request failed with HTTP \(code)."
         case .decodingFailed:
             return "Could not parse OpenAI response."
         case .emptyResponse:
@@ -91,7 +100,12 @@ final class OpenAIService {
         let (data, response) = try await URLSession.shared.data(for: request)
 
         if let http = response as? HTTPURLResponse, http.statusCode != 200 {
-            throw OpenAIError.httpError(http.statusCode)
+            switch http.statusCode {
+            case 401: throw OpenAIError.unauthorized
+            case 429: throw OpenAIError.rateLimited
+            case 500...: throw OpenAIError.serverError(http.statusCode)
+            default:   throw OpenAIError.httpError(http.statusCode)
+            }
         }
 
         guard let decoded = try? JSONDecoder().decode(OpenAIResponse.self, from: data) else {
