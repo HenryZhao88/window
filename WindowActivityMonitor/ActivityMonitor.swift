@@ -53,7 +53,7 @@ final class WindowActivityMonitor: DeviceActivityMonitor {
 
     private func appendEvent(_ event: ActivityEvent) {
         guard let groupURL = FileManager.default.containerURL(
-            forSecurityApplicationGroupIdentifier: "group.com.window.app"
+            forSecurityApplicationGroupIdentifier: "group.com.henryzhao.window"
         ) else { return }
 
         let file = groupURL.appendingPathComponent("activity_events.json")

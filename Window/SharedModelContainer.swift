@@ -2,7 +2,7 @@ import SwiftData
 import Foundation
 
 enum SharedModelContainer {
-    static let appGroupIdentifier = "group.com.window.app"
+    static let appGroupIdentifier = "group.com.henryzhao.window"
 
     static func makeContainer() -> ModelContainer {
         let schema = Schema([

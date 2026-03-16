@@ -74,7 +74,7 @@ private struct WindowTotalActivityReport: DeviceActivityReportScene {
 
     private func persistToAppGroup(_ days: [ProcessedDay]) {
         guard let groupURL = FileManager.default.containerURL(
-            forSecurityApplicationGroupIdentifier: "group.com.window.app"
+            forSecurityApplicationGroupIdentifier: "group.com.henryzhao.window"
         ) else { return }
 
         struct Report: Codable {

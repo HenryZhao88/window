@@ -1,6 +1,6 @@
 name: Window
 options:
-  bundleIdPrefix: com.window
+  bundleIdPrefix: com.henryzhao.window
   deploymentTarget:
     iOS: "18.0"
   xcodeVersion: "16.0"
@@ -22,7 +22,7 @@ targets:
       - path: Window
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.window.app
+        PRODUCT_BUNDLE_IDENTIFIER: com.henryzhao.window
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
@@ -49,7 +49,7 @@ targets:
       - path: WindowActivityMonitor
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.window.app.monitor
+        PRODUCT_BUNDLE_IDENTIFIER: com.henryzhao.window.monitor
         INFOPLIST_FILE: WindowActivityMonitor/Info.plist
     entitlements:
       path: WindowActivityMonitor/WindowActivityMonitor.entitlements
@@ -63,7 +63,7 @@ targets:
       - path: WindowActivityReport
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.window.app.activityreport
+        PRODUCT_BUNDLE_IDENTIFIER: com.henryzhao.window.activityreport
         INFOPLIST_FILE: WindowActivityReport/Info.plist
     entitlements:
       path: WindowActivityReport/WindowActivityReport.entitlements
@@ -79,6 +79,6 @@ targets:
       - path: WindowTests
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.window.app.tests
+        PRODUCT_BUNDLE_IDENTIFIER: com.henryzhao.window.tests
     dependencies:
       - target: Window
