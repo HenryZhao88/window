@@ -95,7 +95,7 @@ struct RecommendationView: View {
                     get: { session.isActive },
                     set: { isPresented in
                         if !isPresented {
-                            session.end()
+                            session.skip()
                         }
                     }
                 )
@@ -382,110 +382,5 @@ struct GoalBanner: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.blue.opacity(0.06))
         .clipShape(RoundedRectangle(cornerRadius: 12))
-    }
-}
-
-@Observable
-@MainActor
-final class FocusSessionManager {
-    var activeTask: WindowTask?
-    var startedAt: Date?
-
-    var isActive: Bool {
-        activeTask != nil
-    }
-
-    func start(task: WindowTask) {
-        activeTask = task
-        startedAt = Date()
-    }
-
-    func elapsedSeconds(now: Date = Date()) -> Int {
-        guard let startedAt else { return 0 }
-        return max(0, Int(now.timeIntervalSince(startedAt)))
-    }
-
-    func end() {
-        activeTask = nil
-        startedAt = nil
-    }
-}
-
-struct FocusTimerView: View {
-    let session: FocusSessionManager
-    let onComplete: (Int) -> Void
-    let onSkip: () -> Void
-    let onBreakLogged: () -> Void
-
-    @Environment(\.dismiss) private var dismiss
-
-    private var taskName: String {
-        session.activeTask?.name ?? "Focus Session"
-    }
-
-    private var estimatedMinutes: Int? {
-        session.activeTask?.estimatedMinutes
-    }
-
-    var body: some View {
-        TimelineView(.periodic(from: .now, by: 1)) { context in
-            let elapsedSeconds = session.elapsedSeconds(now: context.date)
-
-            VStack(spacing: 24) {
-                Spacer()
-
-                Text(taskName)
-                    .font(.largeTitle.bold())
-                    .multilineTextAlignment(.center)
-
-                if let estimatedMinutes {
-                    Text("\(estimatedMinutes) minute focus block")
-                        .font(.headline)
-                        .foregroundStyle(.secondary)
-                }
-
-                Text(formattedTime(elapsedSeconds))
-                    .font(.system(size: 56, weight: .semibold, design: .rounded))
-                    .monospacedDigit()
-
-                VStack(spacing: 12) {
-                    Button("Complete Session") {
-                        onComplete(elapsedSeconds)
-                        session.end()
-                        dismiss()
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
-
-                    Button("Log Break") {
-                        onBreakLogged()
-                    }
-                    .buttonStyle(.bordered)
-
-                    Button("Skip Session", role: .destructive) {
-                        onSkip()
-                        session.end()
-                        dismiss()
-                    }
-                    .buttonStyle(.bordered)
-                }
-
-                Spacer()
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .padding(32)
-            .background(Color(.systemBackground))
-        }
-    }
-
-    private func formattedTime(_ elapsedSeconds: Int) -> String {
-        let hours = elapsedSeconds / 3600
-        let minutes = (elapsedSeconds % 3600) / 60
-        let seconds = elapsedSeconds % 60
-
-        if hours > 0 {
-            return String(format: "%02d:%02d:%02d", hours, minutes, seconds)
-        }
-        return String(format: "%02d:%02d", minutes, seconds)
     }
 }
